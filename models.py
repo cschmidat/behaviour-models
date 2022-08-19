@@ -51,14 +51,10 @@ class BaseModel():
     def update(self, weights, data):
         x, x_pas, y, active_bool = data[:self.dim], data[self.dim:2*self.dim], data[-2], data[-1]
         X_val, y_val = self.X_val, self.y_val
-        # ret_none = lambda x, y, weights: None
         weights = jax.lax.cond(
             active_bool, self.active_fit_one, self.passive_fit_one_psy, x, x_pas, y, weights)
-        # if active_bool:
-        #     weights = self.active_fit_one(x, y, weights)
         weights = self.passive_fit_one(x, weights)
         metric = self.keep_log(X_val, y_val, weights)
-        # metric = jax.lax.cond(active_bool, self.keep_log, ret_none, X_val, y_val, weights)
         return weights, metric
     
     def run_scheme(self, active_cond: Callable, X_train, y_train, X_val, y_val, num_it: int = 5000):
@@ -79,7 +75,7 @@ class BaseModel():
     
     def data_prep(self, X, y, active_bool, num_it):
         """
-        Prepare data for training.
+        Package data into one array for training.
         """
         self.key, subkey = jax.random.split(self.key)
         shuf = jax.random.randint(subkey, (num_it,), 0, len(y))
@@ -87,20 +83,47 @@ class BaseModel():
         return jnp.c_[X[shuf], self.psy_data_train[shuf_psy], y[shuf], active_bool]
 
 @dataclass
-class parclass_data():
+class parclass_base():
+    """
+    Base parameter class.
+    """
     dim = 20
     means = jnp.array([[-0.1]+[0]*(dim-1), [0.1] + [0]*(dim-1)])
-    sigs = [0.07, 0.07] 
+    sigs = [0.07, 0.07]
     num_psy_points = 6
     num_val_points = 1000
+    debug = False
     
 @dataclass
-class parclass_v(parclass_data):
+class parclass_v(parclass_base):
+    """
+    Parameter class for one-layer network.
+    """
     lr_sgd_v: float = 1e-2
     lr_hebb_v: float = 1e-2
     lam_sgd_v: float = 1e-1
     lam_hebb_v: float = 1e-1
     sup_v: bool = True #Supervised learning for v
+
+@dataclass
+class parclass_wv(parclass_base):
+    """
+    Parameter class for two-layer network.
+    """
+    dim_hid = 2
+    lr_sgd_v: float = 1e-2
+    lr_hebb_v: float = 1e-2
+    lam_sgd_v: float = 1e-1
+    lam_hebb_v: float = 1e-1
+    lr_sgd_w: float = 1e-2
+    lr_fsm_w: float = 1e-3
+    lam_sgd_w: float = 1e-2
+    lam_fsm_w: float = 1e-4
+    sup_v: bool = True  #Supervised learning for v
+    sup_w: bool = True  #Supervised learning for w
+    unsup_v: bool = True #Unsupervised learning for v
+    unsup_w: bool = True #Unsupervised learning for w
+    hebb_w: bool = False
 
 def loss(y_true: jnp.ndarray, y_pred:jnp.ndarray, weight: jnp.ndarray, lam: float=0):
     """
@@ -157,21 +180,17 @@ class OneLayer(BaseModel):
         """
         v = weights
         if self.pars.sup_v:
-            # grd = self.grad(x, y, self.v)
             grd = self.grad(v, x, y)
             v -= self.pars.lr_sgd_v * grd
         return v
             
-    # @partial(jax.jit, static_argnums=0)
-    # def grad(self, x, y, v_net):
-    #     loss_v = lambda v: loss(y, single_out(x, v), v, self.pars.lam_sgd_v)
-    #     return jax.grad(loss_v)(v_net)
 
     def passive_fit_one(self, x, weights):
         v = weights
         delta_hebb = hebb_update(v, x, self.out(x, v), self.pars.lr_hebb_v, self.pars.lam_hebb_v)
         v += delta_hebb
         return v
+
     def passive_fit_one_psy(self, x, x_pas, y, weights):
         return self.passive_fit_one(x_pas, weights)
         
@@ -180,7 +199,6 @@ class OneLayer(BaseModel):
         Log what needs to be logged.
         """
         return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)
-#         self.acc_log.append(loss(y_val, self.out(X_val), self.v, self.pars.lam_sgd_v))
         
     def out(self, x: jnp.ndarray, weights):
         """
@@ -211,10 +229,26 @@ class OneLayer(BaseModel):
 
 
 def double_out(x, v, minv, w):
+    """
+    Logit output function for two-layer network.
+    :param x: Input
+    :param v: Output weight
+    :param minv: Lateral connections in hidden layer
+        (only nontrivial for Similarity Matching)
+    :param w: Connections to hidden layer
+    """
     hid =  x @ w.T @ minv.T
     return jax.scipy.special.expit(hid @ v)
 
 def double_out_logit(x, v, minv, w):
+    """
+    Logit output function for two-layer network.
+    :param x: Input
+    :param v: Output weight
+    :param minv: Lateral connections in hidden layer
+        (only nontrivial for Similarity Matching)
+    :param w: Connections to hidden layer
+    """
     hid = x @ w.T @ minv.T
     return hid @ v
 
@@ -226,23 +260,8 @@ def sigmoid_cross_entropy_with_logits(x, z, weight: jnp.ndarray, lam: float=0):
     """
     return lam * jnp.linalg.norm(weight)**2 + jnp.mean(jnp.maximum(x, 0) - x * z + jnp.log1p(jnp.exp(-jnp.abs(x))))
 
-@dataclass
-class parclass_wv(parclass_data):
-    dim_hid = 2
-    lr_sgd_v: float = 1e-2
-    lr_hebb_v: float = 1e-2
-    lam_sgd_v: float = 1e-1
-    lam_hebb_v: float = 1e-1
-    lr_sgd_w: float = 1e-2
-    lr_fsm_w: float = 1e-3
-    lam_sgd_w: float = 1e-2
-    lam_fsm_w: float = 1e-4
-    sup_v: bool = True  #Supervised learning for v
-    sup_w: bool = True  #Supervised learning for w
-    unsup_v: bool = True #Unsupervised learning for v
-    unsup_w: bool = True #Unsupervised learning for w
-    hebb_w: bool = False
-    
+
+      
 class TwoLayer(BaseModel):
     """
     Two Layer Network."""
@@ -287,11 +306,12 @@ class TwoLayer(BaseModel):
         self.psy_data = self.gen_psy_data(subkey)
         self.key, subkey = jax.random.split(self.key)
         self.psy_data_train = self.gen_psy_data(subkey, "train")
-    
+
     def active_fit_one(self, x, x_pas, y, weights):
         weights = self.active_fit_one_v(x, y, weights)
         weights = self.active_fit_one_w(x, y, weights)
         return weights
+
     def passive_fit_one(self, x, weights):
         weights = self.passive_fit_one_v(x, weights)
         weights = self.passive_fit_one_w(x, weights)
@@ -299,61 +319,55 @@ class TwoLayer(BaseModel):
 
     def passive_fit_one_psy(self, x, x_pas, y, weights):
         return self.passive_fit_one(x_pas, weights)
-    
+
     def active_fit_one_v(self, x, y, weights):
         """
         Fit one point with a supervised learning rule for v.
-        x: Input
-        y: label (0 or 1)
+        : param x: Input
+        : param y: label (0 or 1)
+        : param weights: weights
         """
         v, minv, w = weights
         if self.pars.sup_v:
             grd = self.grad_v(v, w, minv, x, y)
             v -= self.pars.lr_sgd_v * grd
         return v, minv, w
+
     def active_fit_one_w(self, x, y, weights):
         """
         Fit one point with a supervised learning rule for w.
-        x: Input
-        y: label (0 or 1)
+        : param x: Input
+        : param y: label (0 or 1)
+        : param weights: weights
         """
         v, minv, w = weights
         if self.pars.sup_w:
             grd = self.grad_w(w, v, minv, x, y)
             w -= self.pars.lr_sgd_w * grd
         return v, minv, w
-        
+
     def passive_fit_one_v(self, x, weights):
         """
         Fit one point with an unsupervised learning rule for v.
-        x: Input
+        : param x: Input
+        : param weights: weights
         """
         v, minv, w = weights
         if self.pars.unsup_v:
             delta_hebb = hebb_update(v, x @ w.T @ minv.T, self.out(x, weights), self.pars.lr_hebb_v, self.pars.lam_hebb_v)
             v += delta_hebb
         return v, minv, w
-        
+
     def passive_fit_one_w(self, x, weights):
         """
         Fit one point with an unsupervised learning rule for w.
-        x: Input
+        : param x: Input
+        : param weights: weights
         """
         v, minv, w = weights
         if self.pars.hebb_w:
             w += hebb_update(w, x, x@w.T, lam=1, eps=self.pars.lr_fsm_w, vec=True)
         elif self.pars.unsup_w:
-#             x = x.flatten()
-#             y = jnp.dot(minv, w.dot(x))
-#             delta_w = jnp.outer(2 * self.pars.lr_fsm_w * y, x)
-#             # w = (1 - 2 * self.pars.lr_fsm_w) * w + delta_w - w * self.pars.lam_fsm_w
-#             w = w + delta_w - w * self.pars.lam_fsm_w
-            
-#             step = 2 * self.pars.lr_fsm_w
-#             z = minv.dot(y)
-# #             print(f"{z.shape=} {y.shape=} {self.w.shape=}")
-#             c = step / (1 + step * jnp.dot(z, y))
-#             minv = minv - jnp.outer(c * z, z.T)
             minv, w = fsm_step(x, minv, w, self.pars.lam_fsm_w, self.pars.lr_fsm_w)
         return v, minv, w
             
@@ -363,13 +377,18 @@ class TwoLayer(BaseModel):
         Log what needs to be logged.
         """
         v, minv, w = weights
-        return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)#, X_val @ w.T @ minv.T, y_val, v
+        if self.pars.debug:
+            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights), X_val @ w.T @ minv.T, y_val, v
+        else:
+            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)#, X_val @ w.T @ minv.T, y_val, v
     
     def out(self, x: jnp.ndarray, weights):
         """
         Model output.
         Parameters:
-        x: Input"""
+        : param x: Input
+        : param weights: weights
+        """
         v, minv, w = weights
         return double_out(x, v, minv, w)
     
@@ -377,20 +396,22 @@ class TwoLayer(BaseModel):
         """
         Generate test data for psychometric curves.
         """
+        means = self.pars.means
         if toggle == "val":
+            #Generate input samples for validation
             psy_data_X = {}
-            means = self.pars.means
             sig = jnp.array([self.pars.sigs[0]])
             for frac in np.linspace(0, 1, num=self.pars.num_psy_points):
                 mean = jnp.array([means[0] + frac * (means[1] - means[0])])
                 psy_data_X[frac], _, _ = gen_data_x(key, self.pars.num_val_points, self.pars.dim, 1, sig, mean)
             return psy_data_X
         elif toggle == "train":
-            means = self.pars.means
+            #Generate input samples to be used for passive training
             fracs = np.linspace(0, 1, num=6)[:, None]
             sig = jnp.array([self.pars.sigs[0]] * len(fracs))
             mean = means[0][None,:] + fracs * (means[1][None,:] - means[0][None,:])
             return gen_data_x(key, self.pars.num_val_points, self.pars.dim, len(fracs), sig, mean)[0]
+            
 def fsm_step(x, minv, w, lam, eps):
     x = x.flatten()
     y = jnp.dot(minv, w.dot(x))
@@ -400,7 +421,6 @@ def fsm_step(x, minv, w, lam, eps):
 
     step = 2 * eps
     z = minv.dot(y)
-#             print(f"{z.shape=} {y.shape=} {self.w.shape=}")
     c = step / (1 + step * jnp.dot(z, y))
     minv = minv - jnp.outer(c * z, z.T) - minv * lam
     return minv, w
