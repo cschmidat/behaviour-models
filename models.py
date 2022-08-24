@@ -1,6 +1,6 @@
 from typing import Callable
 from hypo_x import hebb_update
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import jax
 import jax.numpy as jnp
 from functools import partial
@@ -8,6 +8,9 @@ import numpy as np
 from data_gen import gen_data
 from data_gen_x import gen_data_x
 
+"""
+Condition Functions
+"""
 
 def an_cond(i, _):
     """Active nothing condition
@@ -37,50 +40,85 @@ def pta_cond(i, num_it):
     return i >= num_it * 9 / 10
 
 
+
+"""
+Neural Network helper functions
+"""
+
+
 def ret_fun(x, y, weights):
     """Trivial helper function."""
     return weights
 
-class BaseModel():
-    """"
-    Base model class for the networks we consider."""
-    def __init__(self):
-        raise NotImplementedError
-     
 
-    def update(self, weights, data):
-        x, x_pas, y, active_bool = data[:self.dim], data[self.dim:2*self.dim], data[-2], data[-1]
-        X_val, y_val = self.X_val, self.y_val
-        weights = jax.lax.cond(
-            active_bool, self.active_fit_one, self.passive_fit_one_psy, x, x_pas, y, weights)
-        weights = self.passive_fit_one(x, weights)
-        metric = self.keep_log(X_val, y_val, weights)
-        return weights, metric
-    
-    def run_scheme(self, active_cond: Callable, X_train, y_train, X_val, y_val, num_it: int = 5000):
-        self.X_val, self.y_val = X_val, y_val
-        active_bool = active_cond(jnp.arange(num_it), num_it)
-        print(active_bool.shape)
-        data_train = self.data_prep(X_train, y_train, active_bool, num_it)
-        weights = self.weights
-        self.metrics = jax.lax.scan(self.update, weights, data_train)
 
-    def psy_curve(self, weights):
-        psy_results = {}
-        for thresh in self.psy_data.keys():
-            output = self.out(self.psy_data[thresh], weights)
-            assert len(output) == self.pars.num_val_points
-            psy_results[thresh] = jnp.round(output).mean()
-        return psy_results
-    
-    def data_prep(self, X, y, active_bool, num_it):
-        """
-        Package data into one array for training.
-        """
-        self.key, subkey = jax.random.split(self.key)
-        shuf = jax.random.randint(subkey, (num_it,), 0, len(y))
-        shuf_psy = jax.random.randint(subkey, (num_it,), 0, len(self.psy_data_train))
-        return jnp.c_[X[shuf], self.psy_data_train[shuf_psy], y[shuf], active_bool]
+def loss(y_true: jnp.ndarray, y_pred:jnp.ndarray, weight: jnp.ndarray, lam: float=0):
+    """
+    Binary cross entropy loss plus l^2 regularization.
+    :param y_true: True labels (0 or 1)
+    :param y_pred: Predicted class probabilities (in [0,1])
+    :param weight: Weight used for regularization
+    :param lam: l^2 regularization parameter
+    :return: (average) loss value
+    """
+    x_ent = - (y_true*jnp.log(y_pred) + (1-y_true)*jnp.log(1-y_pred))
+    return lam * jnp.linalg.norm(weight)**2 + x_ent.mean()
+
+def single_out(x: jnp.ndarray, v: jnp.ndarray):
+    """
+    Output for single layer network.
+    :param x: Network input.
+    :param v: Network weight."""
+    return jax.nn.sigmoid(x @ v)
+
+
+def double_out(x, v, minv, w):
+    """
+    Logit output function for two-layer network.
+    :param x: Input
+    :param v: Output weight
+    :param minv: Lateral connections in hidden layer
+        (only nontrivial for Similarity Matching)
+    :param w: Connections to hidden layer
+    """
+    hid =  x @ w.T @ minv.T
+    return jax.scipy.special.expit(hid @ v)
+
+def double_out_logit(x, v, minv, w):
+    """
+    Logit output function for two-layer network.
+    :param x: Input
+    :param v: Output weight
+    :param minv: Lateral connections in hidden layer
+        (only nontrivial for Similarity Matching)
+    :param w: Connections to hidden layer
+    """
+    hid = x @ w.T @ minv.T
+    return hid @ v
+
+def sigmoid_cross_entropy_with_logits(x, z, weight: jnp.ndarray, lam: float=0):
+    """
+    Parameters:
+    x: logits
+    z: labels
+    """
+    return lam * jnp.linalg.norm(weight)**2 + jnp.mean(jnp.maximum(x, 0) - x * z + jnp.log1p(jnp.exp(-jnp.abs(x))))
+
+"""
+Parameter classes
+"""
+def pancake_sigs(sigs, dim, scale):
+    """
+    Prepares covariance matrix for pancake-like distribution.
+    :param sigs: List of stdard deviations
+    :param dim: Dimension
+    :param scale: Scale determining by how much distribution is widened
+    :return: Diagonal covariance matrices with second component rescaled by 'scale'
+    """
+    sigs = [sig**2 for sig in sigs]
+    sigmas = jnp.array([jnp.diag(jnp.array([sigs[0]] + [scale*sigs[0]] + [sigs[0]]*(dim-2))),
+                        jnp.diag(jnp.array([sigs[1]] + [scale*sigs[1]] + [sigs[1]]*(dim-2)))])
+    return sigmas
 
 @dataclass
 class parclass_base():
@@ -88,8 +126,10 @@ class parclass_base():
     Base parameter class.
     """
     dim = 20
-    means = jnp.array([[-0.1]+[0]*(dim-1), [0.1] + [0]*(dim-1)])
-    sigs = [0.07, 0.07]
+    pancake_scale = 2
+    #Means should be override-able
+    means: jnp.ndarray = field(default=jnp.array([[-0.1]+[0]*(dim-1), [0.1] + [0]*(dim-1)]), init=False)
+    sigs = pancake_sigs([0.07, 0.07], dim, scale=pancake_scale)
     num_psy_points = 6
     num_val_points = 1000
     debug = False
@@ -125,24 +165,73 @@ class parclass_wv(parclass_base):
     unsup_w: bool = True #Unsupervised learning for w
     hebb_w: bool = False
 
-def loss(y_true: jnp.ndarray, y_pred:jnp.ndarray, weight: jnp.ndarray, lam: float=0):
-    """
-    Binary cross entropy loss plus l^2 regularization.
-    :param y_true: True labels (0 or 1)
-    :param y_pred: Predicted class probabilities (in [0,1])
-    :param weight: Weight used for regularization
-    :param lam: l^2 regularization parameter
-    :return: (average) loss value
-    """
-    x_ent = - (y_true*jnp.log(y_pred) + (1-y_true)*jnp.log(1-y_pred))
-    return lam * jnp.linalg.norm(weight)**2 + x_ent.mean()
-def single_out(x: jnp.ndarray, v: jnp.ndarray):
-    """
-    Output for single layer network.
-    :param x: Network input.
-    :param v: Network weight."""
-    return jax.nn.sigmoid(x @ v)
 
+
+
+class BaseModel():
+    """"
+    Base model class for the networks we consider.
+    This implements the training routines in JAX."""
+    def __init__(self):
+        raise NotImplementedError
+     
+
+    def update(self, weights, data):
+        """
+        Run one update step, corresponding to the specified training scheme.
+        :param weights: (Tuple of) all weights for the model
+        :param data: Array of packaged training data, with active and passive samples,
+            and a Boolean specifying if the sample is trained with active learning or not.
+        """
+        x, x_pas, y, active_bool = data[:self.dim], data[self.dim:2*self.dim], data[-2], data[-1]
+        X_val, y_val = self.X_val, self.y_val
+        #Perform active fit if the trial is active, and a passive fit otherwise.
+        weights = jax.lax.cond(
+            active_bool, self.active_passive_fit_one, self.passive_fit_one_psy, x, x_pas, y, weights)
+        # weights = self.passive_fit_one(x, weights)
+        metric = self.keep_log(X_val, y_val, weights)
+        return weights, metric
+    def active_passive_fit_one(self, x, x_pas, y, weights):
+        weights = self.active_fit_one(x, x_pas, y, weights)
+        weights = self.passive_fit_one(x, weights)
+        return weights
+    def run_scheme(self, active_cond: Callable, X_train, y_train, X_val, y_val, num_it: int = 5000):
+        """
+        Run the whole training scheme by packaging up training data and
+        executing the update loop.
+        :param active_cond: Function specifying if iteration i is an active or only passive trial.
+        :param X_train: Array with active training samples.
+        :param y_train: Array of active training labels.
+        :param X_val: Array with active validation samples.
+        :param y_val: Array of active validation labels.
+        :param num_it: Number of total (active + passive) iterations.
+        """
+        self.X_val, self.y_val = X_val, y_val
+        active_bool = active_cond(jnp.arange(num_it), num_it)
+        print(active_bool.shape)
+        data_train = self.data_prep(X_train, y_train, active_bool, num_it)
+        weights = self.weights
+        #Training loop
+        self.metrics = jax.lax.scan(self.update, weights, data_train)
+
+    def psy_curve(self, weights):
+        psy_results = {}
+        for thresh in self.psy_data.keys():
+            output = self.out(self.psy_data[thresh], weights)
+            assert len(output) == self.pars.num_val_points
+            psy_results[thresh] = jnp.round(output).mean()
+        return psy_results
+    
+    def data_prep(self, X, y, active_bool, num_it):
+        """
+        Package data into one array for training.
+        Note: Since it doesn't matter here, this is not memory-efficient;
+           we keep things simple at the expense of some GPU RAM.
+        """
+        self.key, subkey = jax.random.split(self.key)
+        shuf = jax.random.randint(subkey, (num_it,), 0, len(y))
+        shuf_psy = jax.random.randint(subkey, (num_it,), 0, len(self.psy_data_train))
+        return jnp.c_[X[shuf], self.psy_data_train[shuf_psy], y[shuf], active_bool]
 
 class OneLayer(BaseModel):
     def __init__(self, key, init_v: jnp.ndarray = None, pars: parclass_v = parclass_v()):
@@ -198,7 +287,10 @@ class OneLayer(BaseModel):
         """
         Log what needs to be logged.
         """
-        return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)
+        if self.pars.debug:
+            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights), weights
+        else:
+            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)
         
     def out(self, x: jnp.ndarray, weights):
         """
@@ -218,50 +310,16 @@ class OneLayer(BaseModel):
             sig = jnp.array([self.pars.sigs[0]])
             for frac in np.linspace(0, 1, num=self.pars.num_psy_points):
                 mean = jnp.array([means[0] + frac * (means[1] - means[0])])
-                psy_data_X[frac], _, _ = gen_data_x(key, self.pars.num_val_points, self.pars.dim, 1, sig, mean)
+                psy_data_X[frac], _, _ = gen_data_x(key, self.pars.num_val_points, self.pars.dim, 1, sig, mean, vec=True)
             return psy_data_X
         elif toggle == "train":
             means = self.pars.means
             fracs = np.linspace(0, 1, num=6)[:, None]
             sig = jnp.array([self.pars.sigs[0]] * len(fracs))
             mean = means[0][None,:] + fracs * (means[1][None,:] - means[0][None,:])
-            return gen_data_x(key, self.pars.num_val_points, self.pars.dim, len(fracs), sig, mean)[0]
+            return gen_data_x(key, self.pars.num_val_points, self.pars.dim, len(fracs), sig, mean, vec=True)[0]
 
 
-def double_out(x, v, minv, w):
-    """
-    Logit output function for two-layer network.
-    :param x: Input
-    :param v: Output weight
-    :param minv: Lateral connections in hidden layer
-        (only nontrivial for Similarity Matching)
-    :param w: Connections to hidden layer
-    """
-    hid =  x @ w.T @ minv.T
-    return jax.scipy.special.expit(hid @ v)
-
-def double_out_logit(x, v, minv, w):
-    """
-    Logit output function for two-layer network.
-    :param x: Input
-    :param v: Output weight
-    :param minv: Lateral connections in hidden layer
-        (only nontrivial for Similarity Matching)
-    :param w: Connections to hidden layer
-    """
-    hid = x @ w.T @ minv.T
-    return hid @ v
-
-def sigmoid_cross_entropy_with_logits(x, z, weight: jnp.ndarray, lam: float=0):
-    """
-    Parameters:
-    x: logits
-    z: labels
-    """
-    return lam * jnp.linalg.norm(weight)**2 + jnp.mean(jnp.maximum(x, 0) - x * z + jnp.log1p(jnp.exp(-jnp.abs(x))))
-
-
-      
 class TwoLayer(BaseModel):
     """
     Two Layer Network."""
@@ -323,9 +381,9 @@ class TwoLayer(BaseModel):
     def active_fit_one_v(self, x, y, weights):
         """
         Fit one point with a supervised learning rule for v.
-        : param x: Input
-        : param y: label (0 or 1)
-        : param weights: weights
+        :param x: Input
+        :param y: label (0 or 1)
+        :param weights: weights
         """
         v, minv, w = weights
         if self.pars.sup_v:
@@ -336,9 +394,9 @@ class TwoLayer(BaseModel):
     def active_fit_one_w(self, x, y, weights):
         """
         Fit one point with a supervised learning rule for w.
-        : param x: Input
-        : param y: label (0 or 1)
-        : param weights: weights
+        :param x: Input
+        :param y: label (0 or 1)
+        :param weights: weights
         """
         v, minv, w = weights
         if self.pars.sup_w:
@@ -349,8 +407,8 @@ class TwoLayer(BaseModel):
     def passive_fit_one_v(self, x, weights):
         """
         Fit one point with an unsupervised learning rule for v.
-        : param x: Input
-        : param weights: weights
+        :param x: Input
+        :param weights: weights
         """
         v, minv, w = weights
         if self.pars.unsup_v:
@@ -361,8 +419,8 @@ class TwoLayer(BaseModel):
     def passive_fit_one_w(self, x, weights):
         """
         Fit one point with an unsupervised learning rule for w.
-        : param x: Input
-        : param weights: weights
+        :param x: Input
+        :param weights: weights
         """
         v, minv, w = weights
         if self.pars.hebb_w:
@@ -386,8 +444,8 @@ class TwoLayer(BaseModel):
         """
         Model output.
         Parameters:
-        : param x: Input
-        : param weights: weights
+        :param x: Input
+        :param weights: weights
         """
         v, minv, w = weights
         return double_out(x, v, minv, w)
@@ -403,24 +461,13 @@ class TwoLayer(BaseModel):
             sig = jnp.array([self.pars.sigs[0]])
             for frac in np.linspace(0, 1, num=self.pars.num_psy_points):
                 mean = jnp.array([means[0] + frac * (means[1] - means[0])])
-                psy_data_X[frac], _, _ = gen_data_x(key, self.pars.num_val_points, self.pars.dim, 1, sig, mean)
+                psy_data_X[frac], _, _ = gen_data_x(key, self.pars.num_val_points, self.pars.dim, 1, sig, mean, vec=True)
             return psy_data_X
         elif toggle == "train":
             #Generate input samples to be used for passive training
             fracs = np.linspace(0, 1, num=6)[:, None]
             sig = jnp.array([self.pars.sigs[0]] * len(fracs))
             mean = means[0][None,:] + fracs * (means[1][None,:] - means[0][None,:])
-            return gen_data_x(key, self.pars.num_val_points, self.pars.dim, len(fracs), sig, mean)[0]
+            return gen_data_x(key, self.pars.num_val_points, self.pars.dim, len(fracs), sig, mean, vec=True)[0]
             
-def fsm_step(x, minv, w, lam, eps):
-    x = x.flatten()
-    y = jnp.dot(minv, w.dot(x))
-    delta_w = jnp.outer(2*eps * y, x)
-    # w = (1 - 2 * self.pars.lr_fsm_w) * w + delta_w - w * self.pars.lam_fsm_w
-    w = w + delta_w - w * lam
 
-    step = 2 * eps
-    z = minv.dot(y)
-    c = step / (1 + step * jnp.dot(z, y))
-    minv = minv - jnp.outer(c * z, z.T) - minv * lam
-    return minv, w
