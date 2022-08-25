@@ -1,9 +1,10 @@
 from functools import partial
+from typing import Tuple
 import jax
 import jax.numpy as jnp
 
 @partial(jax.jit, static_argnames=['vec'])
-def hebb_update(w: jnp.ndarray, X: jnp.ndarray, y_hat: jnp.ndarray, eps: float, lam: float, vec = False):
+def hebb_update(w: jnp.ndarray, X: jnp.ndarray, y_hat: jnp.ndarray, eps: float, lam: float, vec = False) -> jnp.ndarray:
     """
     Performs one Hebbian update step.
     :param w: weight
@@ -21,7 +22,7 @@ def hebb_update(w: jnp.ndarray, X: jnp.ndarray, y_hat: jnp.ndarray, eps: float, 
         deltaw = eps * ((X * (2*y_hat-1)) - lam * jnp.linalg.norm(2*y_hat-1)**2 * w).T #Hebbian learning rule
         return deltaw
 
-def fsm_step(x: jnp.ndarray, minv: jnp.ndarray, w: jnp.ndarray, lam: float, eps: float):
+def fsm_step(x: jnp.ndarray, minv: jnp.ndarray, w: jnp.ndarray, lam: float, eps: float) -> Tuple[jnp.ndarray]:
     """
     Performs one FSM step.
     :param x: Input

@@ -16,7 +16,7 @@ def an_cond(i, _):
     """Active nothing condition
     :param i: Array of indices.
     :return: Array of 'True' values"""
-    return i != jnp.nan
+    return jnp.full_like(i, True, dtype=bool)
 
 
 def ap_cond(i, _):
@@ -251,6 +251,7 @@ class OneLayer(BaseModel):
         else:
             key, subkey = jax.random.split(key)
             self.v = jax.random.normal(subkey, shape=(self.dim,))
+            self.v = self.v / jnp.linalg.norm(self.v)
         self.weights = self.v
         self.acc_log, self.psy_log = [], []
         self.loss_v = lambda v, x, y: loss(y, single_out(x, v), v, self.pars.lam_sgd_v)
@@ -343,6 +344,7 @@ class TwoLayer(BaseModel):
         else:
             key, subkey = jax.random.split(key)
             self.v = jax.random.normal(subkey, shape=(self.dim_hid,))
+            self.v = self.v / jnp.linalg.norm(self.v)
         if init_w is not None:
             assert init_w.shape == (self.dim_hid, self.dim)
             self.w = init_w
