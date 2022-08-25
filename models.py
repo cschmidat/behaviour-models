@@ -5,7 +5,6 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 import numpy as np
-from data_gen import gen_data
 from data_gen_x import gen_data_x
 
 """
@@ -185,10 +184,9 @@ class BaseModel():
         """
         x, x_pas, y, active_bool = data[:self.dim], data[self.dim:2*self.dim], data[-2], data[-1]
         X_val, y_val = self.X_val, self.y_val
-        #Perform active fit if the trial is active, and a passive fit otherwise.
+        #Perform active (and passive) fit if the trial is active, and a passive only fit otherwise.
         weights = jax.lax.cond(
             active_bool, self.active_passive_fit_one, self.passive_fit_one_psy, x, x_pas, y, weights)
-        # weights = self.passive_fit_one(x, weights)
         metric = self.keep_log(X_val, y_val, weights)
         return weights, metric
     def active_passive_fit_one(self, x, x_pas, y, weights):
@@ -234,6 +232,9 @@ class BaseModel():
         return jnp.c_[X[shuf], self.psy_data_train[shuf_psy], y[shuf], active_bool]
 
 class OneLayer(BaseModel):
+    """
+    One Layer Neural Network with one readout weight v.
+    """
     def __init__(self, key, init_v: jnp.ndarray = None, pars: parclass_v = parclass_v()):
         """
         Constructor.
@@ -323,7 +324,9 @@ class OneLayer(BaseModel):
 
 class TwoLayer(BaseModel):
     """
-    Two Layer Network."""
+    Two Layer Network with weight W mapping input to hidden layer,
+    lateral connections M and readout weight v.
+    """
     def __init__(self, key, init_v: jnp.ndarray = None, init_w: jnp.ndarray = None,
                  pars: parclass_wv = parclass_wv()):
         """
@@ -331,7 +334,7 @@ class TwoLayer(BaseModel):
         Params:
         key: PRNG key
         init_v (Optional): Initial weights v.
-        init_w (Optional): Initial weights w.        
+        init_w (Optional): Initial weights W.        
         pars (Optional): Learning and data parameters.
         """
         self.pars = pars
@@ -440,7 +443,7 @@ class TwoLayer(BaseModel):
         if self.pars.debug:
             return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights), X_val @ w.T @ minv.T, y_val, v
         else:
-            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)#, X_val @ w.T @ minv.T, y_val, v
+            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)
     
     def out(self, x: jnp.ndarray, weights):
         """
