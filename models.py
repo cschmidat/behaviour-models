@@ -151,6 +151,7 @@ class parclass_wv(parclass_base):
     """
     dim_hid = 2
     lr_sgd_v: float = 1e-2
+    lr_sgd_v_decay: float = 3
     lr_hebb_v: float = 1e-2
     lam_sgd_v: float = 1e-1
     lam_hebb_v: float = 1e-1
@@ -182,16 +183,16 @@ class BaseModel():
         :param data: Array of packaged training data, with active and passive samples,
             and a Boolean specifying if the sample is trained with active learning or not.
         """
-        x, x_pas, y, active_bool = data[:self.dim], data[self.dim:2*self.dim], data[-2], data[-1]
+        x, x_pas, y, active_bool, i = data[:self.dim], data[self.dim:2*self.dim], data[-3], data[-2], data[-1]
         X_val, y_val = self.X_val, self.y_val
         #Perform active (and passive) fit if the trial is active, and a passive only fit otherwise.
         weights = jax.lax.cond(
-            active_bool, self.active_passive_fit_one, self.passive_fit_one_psy, x, x_pas, y, weights)
+            active_bool, self.active_passive_fit_one, self.passive_fit_one_psy, x, x_pas, y, weights, i)
         metric = self.keep_log(X_val, y_val, weights)
         return weights, metric
-    def active_passive_fit_one(self, x, x_pas, y, weights):
-        weights = self.active_fit_one(x, x_pas, y, weights)
-        weights = self.passive_fit_one(x, weights)
+    def active_passive_fit_one(self, x, x_pas, y, weights, i):
+        weights = self.active_fit_one(x, x_pas, y, weights, i)
+        weights = self.passive_fit_one(x, weights, i)
         return weights
     def run_scheme(self, active_cond: Callable, X_train, y_train, X_val, y_val, num_it: int = 5000):
         """
@@ -205,6 +206,7 @@ class BaseModel():
         :param num_it: Number of total (active + passive) iterations.
         """
         self.X_val, self.y_val = X_val, y_val
+        self.num_it = num_it
         active_bool = active_cond(jnp.arange(num_it), num_it)
         print(active_bool.shape)
         data_train = self.data_prep(X_train, y_train, active_bool, num_it)
@@ -229,7 +231,8 @@ class BaseModel():
         self.key, subkey = jax.random.split(self.key)
         shuf = jax.random.randint(subkey, (num_it,), 0, len(y))
         shuf_psy = jax.random.randint(subkey, (num_it,), 0, len(self.psy_data_train))
-        return jnp.c_[X[shuf], self.psy_data_train[shuf_psy], y[shuf], active_bool]
+        self.num_active_it = active_bool.sum()
+        return jnp.c_[X[shuf], self.psy_data_train[shuf_psy], y[shuf], active_bool, jnp.cumsum(active_bool)]
 
 class OneLayer(BaseModel):
     """
@@ -263,7 +266,7 @@ class OneLayer(BaseModel):
         self.psy_data_train = self.gen_psy_data(subkey, "train")
         
 
-    def active_fit_one(self, x, x_pas, y, weights):
+    def active_fit_one(self, x: jnp.ndarray, x_pas: jnp.ndarray, y, weights, i):
         """
         Fit one point with a supervised learning rule.
         x: Input
@@ -276,14 +279,14 @@ class OneLayer(BaseModel):
         return v
             
 
-    def passive_fit_one(self, x, weights):
+    def passive_fit_one(self, x, weights, i):
         v = weights
         delta_hebb = hebb_update(v, x, self.out(x, v), self.pars.lr_hebb_v, self.pars.lam_hebb_v)
         v += delta_hebb
         return v
 
-    def passive_fit_one_psy(self, x, x_pas, y, weights):
-        return self.passive_fit_one(x_pas, weights)
+    def passive_fit_one_psy(self, x, x_pas, y, weights, i):
+        return self.passive_fit_one(x_pas, weights, i)
         
     def keep_log(self, X_val, y_val, weights):
         """
@@ -370,20 +373,20 @@ class TwoLayer(BaseModel):
         self.key, subkey = jax.random.split(self.key)
         self.psy_data_train = self.gen_psy_data(subkey, "train")
 
-    def active_fit_one(self, x, x_pas, y, weights):
-        weights = self.active_fit_one_v(x, y, weights)
-        weights = self.active_fit_one_w(x, y, weights)
+    def active_fit_one(self, x, x_pas, y, weights, i):
+        weights = self.active_fit_one_v(x, y, weights, i)
+        weights = self.active_fit_one_w(x, y, weights, i)
         return weights
 
-    def passive_fit_one(self, x, weights):
-        weights = self.passive_fit_one_v(x, weights)
-        weights = self.passive_fit_one_w(x, weights)
+    def passive_fit_one(self, x, weights, i):
+        weights = self.passive_fit_one_v(x, weights, i)
+        weights = self.passive_fit_one_w(x, weights, i)
         return weights
 
-    def passive_fit_one_psy(self, x, x_pas, y, weights):
-        return self.passive_fit_one(x_pas, weights)
+    def passive_fit_one_psy(self, x, x_pas, y, weights, i):
+        return self.passive_fit_one(x_pas, weights, i)
 
-    def active_fit_one_v(self, x, y, weights):
+    def active_fit_one_v(self, x, y, weights, i):
         """
         Fit one point with a supervised learning rule for v.
         :param x: Input
@@ -393,10 +396,11 @@ class TwoLayer(BaseModel):
         v, minv, w = weights
         if self.pars.sup_v:
             grd = self.grad_v(v, w, minv, x, y)
-            v -= self.pars.lr_sgd_v * grd
+            eps = self.pars.lr_sgd_v * jnp.exp(-self.pars.lr_sgd_v_decay*i/self.num_active_it)
+            v -= eps * grd
         return v, minv, w
 
-    def active_fit_one_w(self, x, y, weights):
+    def active_fit_one_w(self, x, y, weights, i):
         """
         Fit one point with a supervised learning rule for w.
         :param x: Input
@@ -409,7 +413,7 @@ class TwoLayer(BaseModel):
             w -= self.pars.lr_sgd_w * grd
         return v, minv, w
 
-    def passive_fit_one_v(self, x, weights):
+    def passive_fit_one_v(self, x, weights, i):
         """
         Fit one point with an unsupervised learning rule for v.
         :param x: Input
@@ -421,7 +425,7 @@ class TwoLayer(BaseModel):
             v += delta_hebb
         return v, minv, w
 
-    def passive_fit_one_w(self, x, weights):
+    def passive_fit_one_w(self, x, weights, i):
         """
         Fit one point with an unsupervised learning rule for w.
         :param x: Input
@@ -475,4 +479,3 @@ class TwoLayer(BaseModel):
             mean = means[0][None,:] + fracs * (means[1][None,:] - means[0][None,:])
             return gen_data_x(key, self.pars.num_val_points, self.pars.dim, len(fracs), sig, mean, vec=True)[0]
             
-
