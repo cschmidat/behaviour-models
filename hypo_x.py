@@ -37,10 +37,12 @@ def fsm_step(x: jnp.ndarray, minv: jnp.ndarray, w: jnp.ndarray, lam: float, eps:
     #Original weight decay formula:
     # w = (1 - 2 * self.pars.lr_fsm_w) * w + delta_w - w * self.pars.lam_fsm_w
 
-    w = w + delta_w - w * lam
+    w = w + delta_w - lam*w * 2*eps
 
-    step = 2 * eps
-    z = minv.dot(y)
-    c = step / (1 + step * jnp.dot(z, y))
-    minv = minv - jnp.outer(c * z, z.T) - minv * lam
+    # step = 2*eps
+    # z = minv.dot(y)
+    # c = step / (1 + step * jnp.dot(z, y))
+    # minv = minv - jnp.outer(c * z, z.T) - minv * step
+    m = jnp.linalg.inv(minv)
+    minv = jnp.linalg.inv(m + eps*(jnp.outer(y, y)-lam*m))
     return minv, w

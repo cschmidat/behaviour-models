@@ -1,5 +1,5 @@
 from typing import Callable
-from hypo_x import hebb_update
+from hypo_x import hebb_update, fsm_step
 from dataclasses import dataclass, field
 import jax
 import jax.numpy as jnp
@@ -124,14 +124,14 @@ class parclass_base():
     """
     Base parameter class.
     """
-    dim = 20
-    pancake_scale = 2
+    dim: int = 20
+    pancake_scale: float = 2
     #Means should be override-able
     means: jnp.ndarray = field(default=jnp.array([[-0.1]+[0]*(dim-1), [0.1] + [0]*(dim-1)]), init=False)
-    sigs = pancake_sigs([0.07, 0.07], dim, scale=pancake_scale)
-    num_psy_points = 6
-    num_val_points = 1000
-    debug = False
+    sigs: jnp.ndarray = pancake_sigs([0.07, 0.07], dim, scale=pancake_scale)
+    num_psy_points: int = 6
+    num_val_points: int = 1000
+    debug: bool = False
     
 @dataclass
 class parclass_v(parclass_base):
@@ -151,7 +151,7 @@ class parclass_wv(parclass_base):
     """
     dim_hid = 2
     lr_sgd_v: float = 1e-2
-    lr_sgd_v_decay: float = 3
+    lr_sgd_v_decay: float = 0
     lr_hebb_v: float = 1e-2
     lam_sgd_v: float = 1e-1
     lam_hebb_v: float = 1e-1
@@ -445,9 +445,9 @@ class TwoLayer(BaseModel):
         """
         v, minv, w = weights
         if self.pars.debug:
-            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights), X_val @ w.T @ minv.T, y_val, v
+            return (jnp.round(self.out(X_val, weights)) == y_val).mean(), self.psy_curve(weights), X_val @ w.T @ minv.T, y_val, v
         else:
-            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)
+            return (jnp.round(self.out(X_val, weights)) == y_val).mean(), self.psy_curve(weights), jnp.linalg.norm(w), jnp.linalg.norm(minv)
     
     def out(self, x: jnp.ndarray, weights):
         """
