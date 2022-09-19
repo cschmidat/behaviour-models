@@ -1,5 +1,5 @@
 """
-Running this script generates the three learning rate plots.
+Running this script generates a learning rate plot.
 
 The data loaded is be specified by a command line argument.
 """
@@ -30,8 +30,10 @@ def style_plot(ax: plt.Axes, num_it: int) -> plt.Axes:
 def make_plots(data: dict, title: str, num_it: int, outfile: str):
     """
     Make plot and save it.
+    :param data: Dict of three numpy arrays with accuracies
     :param title: Plot title
     :param num_it: Number of plotted iterations
+    :param outfile: Output filename
     """
     to_draw = [
     [data['an'], "A only", "blue"],
@@ -64,7 +66,8 @@ def make_plots(data: dict, title: str, num_it: int, outfile: str):
 def main(infile: str, outfile: str, title: str):
     """
     Script that loads data and stores plots.
-    :param filename: Data file name
+    :param infile: Data filename
+    :param outfile: Output filename
     :param title: Plot title
     """
     data = np.load(infile)
