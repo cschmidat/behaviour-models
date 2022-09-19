@@ -124,7 +124,7 @@ class parclass_base():
     """
     Base parameter class.
     """
-    dim: int = 20
+    dim: int = 50
     pancake_scale: float = 2
     #Means should be override-able
     means: jnp.ndarray = field(default=jnp.array([[-0.1]+[0]*(dim-1), [0.1] + [0]*(dim-1)]), init=False)
