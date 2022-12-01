@@ -295,7 +295,7 @@ class OneLayer(BaseModel):
         if self.pars.debug:
             return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights), weights
         else:
-            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights)
+            return (jnp.round(self.out(X_val, weights)).flatten() == y_val).mean(), self.psy_curve(weights), jnp.linalg.norm(self.weights)
         
     def out(self, x: jnp.ndarray, weights):
         """
@@ -448,7 +448,7 @@ class TwoLayer(BaseModel):
         if self.pars.debug:
             return (jnp.round(self.out(X_val, weights)) == y_val).mean(), self.psy_curve(weights), X_val @ w.T @ minv.T, y_val, v
         else:
-            return (jnp.round(self.out(X_val, weights)) == y_val).mean(), self.psy_curve(weights), jnp.linalg.norm(w), jnp.linalg.norm(minv)
+            return (jnp.round(self.out(X_val, weights)) == y_val).mean(), self.psy_curve(weights), jnp.linalg.norm(v), jnp.linalg.norm(minv), jnp.linalg.norm(w)
     
     def out(self, x: jnp.ndarray, weights):
         """
