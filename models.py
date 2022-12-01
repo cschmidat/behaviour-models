@@ -127,8 +127,8 @@ class parclass_base():
     dim: int = 50
     pancake_scale: float = 2
     #Means should be override-able
-    means: jnp.ndarray = field(default=jnp.array([[-0.1]+[0]*(dim-1), [0.1] + [0]*(dim-1)]), init=False)
-    sigs: jnp.ndarray = pancake_sigs([0.07, 0.07], dim, scale=pancake_scale)
+    means: jnp.ndarray = field(default=jnp.array([[-1.5]+[0]*(dim-1), [1.5] + [0]*(dim-1)]), init=False)
+    sigs: jnp.ndarray = field(default=pancake_sigs([1, 1], dim, scale=pancake_scale), init=False)
     num_psy_points: int = 6
     num_val_points: int = 1000
     debug: bool = False
@@ -359,6 +359,7 @@ class TwoLayer(BaseModel):
             self.w = jax.random.normal(key, shape=(self.dim_hid, self.dim))
             self.w = self.w / jnp.linalg.norm(self.w)
         self.minv = jnp.eye(self.dim_hid)
+        self.minv = self.minv / jnp.linalg.norm(self.minv)
         self.acc_log, self.psy_log = [], []
         self.weights = self.v, self.minv, self.w
         
