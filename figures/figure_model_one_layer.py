@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import figutils
 
-# If you want changes in figutils to reload, uncomment these lines:
+# If you change figutils often, and want changes reloaded, uncomment lines below:
 #from importlib import reload
 #reload(figutils)
 
@@ -24,9 +24,10 @@ SAVE_FIGURE = 1
 outputDir = '/tmp/'
 figFilename = 'plots_model_one_layer' # Do not include extension
 figFormat = 'pdf' # 'pdf' or 'svg'
+figFullPath = os.path.join(outputDir, figFilename+'.'+figFormat)
 figSize = [4, 2.5] # In inches
 
-labelPosX = [0.03, 0.33]   # Horiz position for panel labels
+labelPosX = [0.03, 0.32]   # Horiz position for panel labels
 labelPosY = [0.92, 0.48]    # Vert position for panel labels
 
 
@@ -37,6 +38,7 @@ labelPosY = [0.92, 0.48]    # Vert position for panel labels
 fig = plt.gcf()
 fig.clf()
 fig.set_facecolor('w')
+fig.set_size_inches(figSize)
 
 gsMain = gridspec.GridSpec(1, 2, width_ratios=[0.3,0.7])
 gsMain.update(left=0.15, right=0.96, top=0.9, bottom=0.15, wspace=0.2, hspace=0.3)
@@ -60,4 +62,5 @@ figutils.make_plots(fig, ax1, figDataFullPath, params)
 plt.show()
 
 if SAVE_FIGURE:
-    figutils.save_figure(figFilename, figFormat, figSize, outputDir)
+    fig.savefig(figFullPath, facecolor='none')
+    print('Figure saved to {0}'.format(figFullPath))

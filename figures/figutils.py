@@ -115,13 +115,4 @@ def make_plots(fig: plt.Figure, ax: plt.Axes, filename: str, params: dict):
     
     ax.set_title(params['title'], fontsize=params['fontSizePanel'])
 
- 
-def save_figure(filename, fileformat, figsize, outputDir='./', facecolor='none', **kwargs):
-    plt.gcf().set_size_inches(figsize)
-    figName = filename+'.{0}'.format(fileformat)
-    fullName = os.path.join(outputDir, figName)
-    if facecolor == 'none':
-        plt.gcf().set_frameon(False)
-    plt.savefig(fullName, format=fileformat, facecolor=facecolor, **kwargs)
-    plt.gcf().set_frameon(True)
-    print('Figure saved to {0}'.format(fullName))
+
