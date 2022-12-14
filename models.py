@@ -125,7 +125,7 @@ class parclass_base():
     Base parameter class.
     """
     dim: int = 50
-    pancake_scale: float = 2
+    pancake_scale: float = 1
     #Means should be override-able
     means: jnp.ndarray = field(default=jnp.array([[-1.5]+[0]*(dim-1), [1.5] + [0]*(dim-1)]), init=False)
     sigs: jnp.ndarray = field(default=pancake_sigs([1, 1], dim, scale=pancake_scale), init=False)
@@ -149,7 +149,7 @@ class parclass_wv(parclass_base):
     """
     Parameter class for two-layer network.
     """
-    dim_hid = 2
+    dim_hid = 15
     lr_sgd_v: float = 1e-2
     lr_sgd_v_decay: float = 0
     lr_hebb_v: float = 1e-2

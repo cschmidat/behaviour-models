@@ -12,7 +12,7 @@ def gen_data_x(key: jnp.ndarray, n_points: int, n_dim: int, n_classes: int, sigm
     :param n_classes: number of classes
     :param sigmas: list of standard deviations or array of covariances
     :param means: Array of means
-    :param vec: True if sigmas are scalar s.d., False if they are covariances
+    :param vec: False if sigmas are scalar s.d., True if they are covariances
     :return:
         X: data matrix
         y: label vector

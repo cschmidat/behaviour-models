@@ -7,8 +7,10 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
+
 matplotlib.rcParams['font.family'] = 'Helvetica'
 matplotlib.rcParams['svg.fonttype'] = 'none'  # To render as font rather than outlines
+
 
 fontSizeLabels = 8
 fontSizeTicks = 8
@@ -77,24 +79,23 @@ def style_plot(ax: plt.Axes, num_it: int, params: dict) -> plt.Axes:
     return ax
 
 
-def make_plots(fig: plt.Figure, ax: plt.Axes, filename: str, params: dict):
+def make_plots(fig: plt.Figure, ax: plt.Axes, data: dict, params: dict):
     """
     Draw plot on the provided figure and axis objects.
     :param fig: Figure to draw to
     :param ax: Axis to draw to
-    :param filename: File containing a dict of three numpy arrays with accuracies
+    :param data: dict of three numpy arrays with accuracies
     :param params: dict with values for:
         title: Plot title
         fontSizeLabels: Legend and label font size
         fontSizeTicks: Ticks font size
         fontSizePanel: Plot title font size
     """
-    data = np.load(filename)
     num_it = data['an'].shape[-1]
     to_draw = [
-    [data['an'], "A only", "#3465a4"],
-    [data['ap'][:, ::10], "A + P", "#4e9a06"],
-    [data['pta'][:, -num_it:], "P : A", "#cc0000"],
+    [data['an'], "A only", colors['activeOnly']],
+    [data['ap'][:, ::10], "A + P", colors['activePassive']],
+    [data['pta'][:, -num_it:], "P : A", colors['passiveThenActive']],
     ]
     
     for data_it, label, color in to_draw:

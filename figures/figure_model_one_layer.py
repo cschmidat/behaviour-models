@@ -21,7 +21,7 @@ figDataFile = 'onel.npz'
 figDataFullPath = os.path.join(figDataDir, figDataFile)
 
 SAVE_FIGURE = 1
-outputDir = '/tmp/'
+outputDir = ''
 figFilename = 'plots_model_one_layer' # Do not include extension
 figFormat = 'pdf' # 'pdf' or 'svg'
 figFullPath = os.path.join(outputDir, figFilename+'.'+figFormat)
@@ -32,7 +32,7 @@ labelPosY = [0.92, 0.48]    # Vert position for panel labels
 
 
 # -- Load data --
-#figData = np.load(figDataFullPath)
+figData = np.load(figDataFullPath)
 
 # -- Plot results --
 fig = plt.gcf()
@@ -41,7 +41,7 @@ fig.set_facecolor('w')
 fig.set_size_inches(figSize)
 
 gsMain = gridspec.GridSpec(1, 2, width_ratios=[0.3,0.7])
-gsMain.update(left=0.15, right=0.96, top=0.9, bottom=0.15, wspace=0.2, hspace=0.3)
+gsMain.update(left=0.1, right=0.96, top=0.9, bottom=0.15, wspace=0.2, hspace=0.3)
 
 # -- Panel labels for cartoons and plots --
 fig.text(labelPosX[0], labelPosY[0], 'A', fontsize=figutils.fontSizePanel, fontweight='bold')
@@ -56,7 +56,7 @@ params = {
     'fontSizePanel': figutils.fontSizePanel,
     'title': '',
 }
-figutils.make_plots(fig, ax1, figDataFullPath, params)
+figutils.make_plots(fig, ax1, figData, params)
     
 
 plt.show()
