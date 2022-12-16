@@ -7,11 +7,11 @@ import jax.numpy as jnp
 def hebb_update(w: jnp.ndarray, X: jnp.ndarray, y_hat: jnp.ndarray, eps: float, lam: float, vec = False) -> jnp.ndarray:
     """
     Performs one Hebbian update step.
-    :param w: weight
-    :param X: data matrix
-    :param y_hat: output
-    :param eps: learning rate
-    :param lam: decay constant
+    :param w: Weight
+    :param X: Data matrix
+    :param y_hat: Output
+    :param eps: Learning rate
+    :param lam: Weight decay constant
     :param vec: True if y_hat is a vector, False if it's a scalar
     :return: Calculated weight update Delta_W
     """
@@ -28,6 +28,8 @@ def fsm_step(x: jnp.ndarray, minv: jnp.ndarray, w: jnp.ndarray, lam: float, eps:
     :param x: Input
     :param minv: Lateral connections in hidden layer
     :param w: Connections to hidden layer
+    :param lam: Weight decay constant
+    :param eps: Learning rate
     :return: Calculated new weights minv, w
     """
     x = x.flatten()

@@ -91,6 +91,7 @@ def double_out_logit(x, v, minv, w):
     :param minv: Lateral connections in hidden layer
         (only nontrivial for Similarity Matching)
     :param w: Connections to hidden layer
+    :return: logit of model output
     """
     hid = x @ w.T @ minv.T
     return hid @ v
@@ -98,8 +99,10 @@ def double_out_logit(x, v, minv, w):
 def sigmoid_cross_entropy_with_logits(x, z, weight: jnp.ndarray, lam: float=0):
     """
     Parameters:
-    x: logits
-    z: labels
+    :param x: logits
+    :param z: labels
+    :param weight: Weight (for l^2 regularization term)
+    :lam: Weight decay constant
     """
     return lam * jnp.linalg.norm(weight)**2 + jnp.mean(jnp.maximum(x, 0) - x * z + jnp.log1p(jnp.exp(-jnp.abs(x))))
 
@@ -109,7 +112,7 @@ Parameter classes
 def pancake_sigs(sigs, dim, scale):
     """
     Prepares covariance matrix for pancake-like distribution.
-    :param sigs: List of stdard deviations
+    :param sigs: List of standard deviations
     :param dim: Dimension
     :param scale: Scale determining by how much distribution is widened
     :return: Diagonal covariance matrices with second component rescaled by 'scale'
@@ -126,12 +129,14 @@ class parclass_base():
     """
     dim: int = 50
     pancake_scale: float = 1
-    #Means should be override-able
-    means: jnp.ndarray = field(default=jnp.array([[-1.5]+[0]*(dim-1), [1.5] + [0]*(dim-1)]), init=False)
-    sigs: jnp.ndarray = field(default=pancake_sigs([1, 1], dim, scale=pancake_scale), init=False)
     num_psy_points: int = 6
     num_val_points: int = 1000
     debug: bool = False
+    #Add means and sigs
+    def __post_init__(self):
+        self.means: jnp.ndarray = jnp.array([[-1.5]+[0]*(self.dim-1), [1.5] + [0]*(self.dim-1)])
+        self.sigs: jnp.ndarray = pancake_sigs([1, 1], self.dim, scale=self.pancake_scale)
+
     
 @dataclass
 class parclass_v(parclass_base):
@@ -190,7 +195,11 @@ class BaseModel():
             active_bool, self.active_passive_fit_one, self.passive_fit_one_psy, x, x_pas, y, weights, i)
         metric = self.keep_log(X_val, y_val, weights)
         return weights, metric
+    
     def active_passive_fit_one(self, x, x_pas, y, weights, i):
+        """
+        Do an active and a passive fit
+        """
         weights = self.active_fit_one(x, x_pas, y, weights, i)
         weights = self.passive_fit_one(x, weights, i)
         return weights
