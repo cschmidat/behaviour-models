@@ -106,9 +106,7 @@ def sigmoid_cross_entropy_with_logits(x, z, weight: jnp.ndarray, lam: float=0):
     """
     return lam * jnp.linalg.norm(weight)**2 + jnp.mean(jnp.maximum(x, 0) - x * z + jnp.log1p(jnp.exp(-jnp.abs(x))))
 
-"""
-Parameter classes
-"""
+
 def pancake_sigs(sigs, dim, scale):
     """
     Prepares covariance matrix for pancake-like distribution.
@@ -121,6 +119,10 @@ def pancake_sigs(sigs, dim, scale):
     sigmas = jnp.array([jnp.diag(jnp.array([sigs[0]] + [scale*sigs[0]] + [sigs[0]]*(dim-2))),
                         jnp.diag(jnp.array([sigs[1]] + [scale*sigs[1]] + [sigs[1]]*(dim-2)))])
     return sigmas
+
+"""
+Parameter classes
+"""
 
 @dataclass
 class parclass_base():
@@ -172,6 +174,9 @@ class parclass_wv(parclass_base):
 
 
 
+"""
+Model classes
+"""
 
 class BaseModel():
     """"
@@ -346,7 +351,7 @@ class TwoLayer(BaseModel):
         Params:
         key: PRNG key
         init_v (Optional): Initial weights v.
-        init_w (Optional): Initial weights W.        
+        init_w (Optional): Initial weights W.
         pars (Optional): Learning and data parameters.
         """
         self.pars = pars

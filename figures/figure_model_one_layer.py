@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import figutils
-
+from PyPDF2 import PdfReader, PdfWriter, Transformation
 # If you change figutils often, and want changes reloaded, uncomment lines below:
 #from importlib import reload
 #reload(figutils)
@@ -22,13 +22,15 @@ figDataFullPath = os.path.join(figDataDir, figDataFile)
 
 SAVE_FIGURE = 1
 outputDir = ''
-figFilename = 'plots_model_one_layer' # Do not include extension
-figFormat = 'pdf' # 'pdf' or 'svg'
-figFullPath = os.path.join(outputDir, figFilename+'.'+figFormat)
+figFilename = 'plots_model_one_layer.pdf'
+figMergeFilename = 'merge-plots_model_one_layer.pdf'
+
+figFullPath = os.path.join(outputDir, figFilename)
+figMergeFullPath = os.path.join(outputDir, figMergeFilename)
 figSize = [4, 2.5] # In inches
 
-labelPosX = [0.03, 0.32]   # Horiz position for panel labels
-labelPosY = [0.92, 0.48]    # Vert position for panel labels
+labelPosX = [0.0, 0.32]   # Horiz position for panel labels
+labelPosY = [0.95, 0.48]    # Vert position for panel labels
 
 
 # -- Load data --
@@ -41,7 +43,7 @@ fig.set_facecolor('w')
 fig.set_size_inches(figSize)
 
 gsMain = gridspec.GridSpec(1, 2, width_ratios=[0.3,0.7])
-gsMain.update(left=0.1, right=0.96, top=0.9, bottom=0.15, wspace=0.2, hspace=0.3)
+gsMain.update(left=0.0, right=0.97, top=0.9, bottom=0.15, wspace=0.4, hspace=0.3)
 
 # -- Panel labels for cartoons and plots --
 fig.text(labelPosX[0], labelPosY[0], 'A', fontsize=figutils.fontSizePanel, fontweight='bold')
@@ -63,4 +65,23 @@ plt.show()
 
 if SAVE_FIGURE:
     fig.savefig(figFullPath, facecolor='none')
-    print('Figure saved to {0}'.format(figFullPath))
+
+    # Get the data
+    reader_base = PdfReader(figFullPath)
+    page_base = reader_base.pages[0]
+
+    reader = PdfReader("input_new.pdf")
+    input_box = reader.pages[0]
+
+    reader = PdfReader("model_onel.pdf")
+    model_box = reader.pages[0]
+
+    page_base.mergeScaledTranslatedPage(input_box, scale=1, tx=0*72., ty=0*72.)
+    page_base.mergeScaledTranslatedPage(model_box, scale=1, tx=0.15*72., ty=1.4*72.)
+    # Write the result back
+    writer = PdfWriter()
+    writer.add_page(page_base)
+    with open(figMergeFullPath, "wb") as fp:
+        writer.write(fp)
+        print('Figure saved to {0}'.format(figMergeFullPath))
+
