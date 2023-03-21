@@ -19,10 +19,10 @@ from PyPDF2 import PdfReader, PdfWriter, Transformation
 figDataDir = '../sim_data/' 
 figData3File = 'doublel_sv_wrongpc.npz'
 figData4File = 'doublel_sv_wrongpc_fsm.npz'
-figData5File = 'doublel_svw_fsm.npz'
+# figData5File = 'doublel_svw_fsm.npz'
 figData3FullPath = os.path.join(figDataDir, figData3File)
 figData4FullPath = os.path.join(figDataDir, figData4File)
-figData5FullPath = os.path.join(figDataDir, figData5File)
+# figData5FullPath = os.path.join(figDataDir, figData5File)
 
 SAVE_FIGURE = 1
 outputDir = ''
@@ -31,16 +31,18 @@ figMergeFilename = 'merge-plots_model_fsm.pdf'
 
 figFullPath = os.path.join(outputDir, figFilename)
 figMergeFullPath = os.path.join(outputDir, figMergeFilename)
-figSize = [4.0, 6.0] # In inches
+figSize = [4.0, 4.0] # In inches
 
 labelPosX = [0.0, 0.43]   # Horiz position for panel labels
-labelPosY = [0.975, 0.65, 0.32]    # Vert position for panel labels
+labelPosY = [0.95, 0.4]    # Vert position for panel labels
 
+labelModX = [0.145, 0.26] #Horiz position of UL/SL labels
+labelModY = [0.15, 0.195] #Vert position of UL/SL labels
 
 # -- Load data --
 fig3Data = np.load(figData3FullPath)
 fig4Data = np.load(figData4FullPath)
-fig5Data = np.load(figData5FullPath)
+# fig5Data = np.load(figData5FullPath)
 
 # -- Plot results --
 fig = plt.gcf()
@@ -48,22 +50,26 @@ fig.clf()
 fig.set_facecolor('w')
 fig.set_size_inches(figSize)
 
-gsMain = gridspec.GridSpec(3, 2, width_ratios=[0.5,0.5])
-gsMain.update(left=0.0, right=0.969, top=0.96, bottom=0.06, wspace=0.3, hspace=0.5)
+gsMain = gridspec.GridSpec(2, 2, width_ratios=[0.5,0.5])
+gsMain.update(left=0.0, right=0.969, top=0.94, bottom=0.06, wspace=0.3, hspace=0.5)
 
 # -- Panel labels for cartoons and plots --
 fig.text(labelPosX[0], labelPosY[0], 'A', fontsize=figutils.fontSizePanel, fontweight='bold')
 fig.text(labelPosX[1], labelPosY[0], 'B', fontsize=figutils.fontSizePanel, fontweight='bold')
 fig.text(labelPosX[0], labelPosY[1], 'C', fontsize=figutils.fontSizePanel, fontweight='bold')
 fig.text(labelPosX[1], labelPosY[1], 'D', fontsize=figutils.fontSizePanel, fontweight='bold')
-fig.text(labelPosX[0], labelPosY[2], 'E', fontsize=figutils.fontSizePanel, fontweight='bold')
-fig.text(labelPosX[1], labelPosY[2], 'F', fontsize=figutils.fontSizePanel, fontweight='bold')
+# fig.text(labelPosX[0], labelPosY[2], 'E', fontsize=figutils.fontSizePanel, fontweight='bold')
+# fig.text(labelPosX[1], labelPosY[2], 'F', fontsize=figutils.fontSizePanel, fontweight='bold')
+fig.text(labelModX[0], labelModY[0], 'UL', fontsize=figutils.fontSizeLabels, fontweight='bold')
+fig.text(labelModX[1], labelModY[1], 'SL', fontsize=figutils.fontSizeLabels, fontweight='bold')
+
+
 
 
 # -- Panel: learning curves for two-layer models --
 ax1 = plt.subplot(gsMain[0, 1])
 ax2 = plt.subplot(gsMain[1, 1])
-ax3 = plt.subplot(gsMain[2, 1])
+# ax3 = plt.subplot(gsMain[2, 1])
 params = {
     'fontSizeLabels': figutils.fontSizeLabels,
     'fontSizeTicks': figutils.fontSizeTicks,
@@ -73,8 +79,8 @@ params = {
 figutils.make_plots(fig, ax1, fig3Data, params)
 params['title'] = 'Model 4'
 figutils.make_plots(fig, ax2, fig4Data, params)
-params['title'] = 'Model 5'
-figutils.make_plots(fig, ax3, fig5Data, params)
+# params['title'] = 'Model 5'
+# figutils.make_plots(fig, ax3, fig5Data, params)
     
 
 plt.show()
@@ -92,13 +98,13 @@ if SAVE_FIGURE:
     reader = PdfReader("model4.pdf")
     model4_box = reader.pages[0]
     
-    reader = PdfReader("input_naligned-crop.pdf")
-    naligned_box = reader.pages[0]
+    # reader = PdfReader("input_naligned-crop.pdf")
+    # naligned_box = reader.pages[0]
 
 
-    page_base.mergeScaledTranslatedPage(niso_box, scale=1, tx=0*72., ty=4.35*72.)
-    page_base.mergeScaledTranslatedPage(model4_box, scale=1.15, tx=0.2*72., ty=2.4*72.)
-    page_base.mergeScaledTranslatedPage(naligned_box, scale=1, tx=0*72., ty=0.3*72.)
+    page_base.mergeScaledTranslatedPage(niso_box, scale=1, tx=0*72., ty=2.35*72.)
+    page_base.mergeScaledTranslatedPage(model4_box, scale=1.15, tx=0.2*72., ty=0.3*72.)
+    # page_base.mergeScaledTranslatedPage(naligned_box, scale=1, tx=0*72., ty=0.3*72.)
     # Write the result back
     writer = PdfWriter()
     writer.add_page(page_base)

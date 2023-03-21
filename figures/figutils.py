@@ -6,6 +6,12 @@ import os
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from jaratoolbox import extraplots
+from jaratoolbox import extrastats
+import studyutils
+import scipy
+import pandas as pd
+import seaborn as sns
 
 
 matplotlib.rcParams['font.family'] = 'Helvetica'
@@ -79,6 +85,36 @@ def style_plot(ax: plt.Axes, num_it: int, params: dict) -> plt.Axes:
     return ax
 
 
+def significance_stars(xRange, yPos, yLength, color='k', starMarker='*', starSize=8, starString=None, gapFactor=0.1):
+    """
+    xRange: 2-element list or array with x values for horizontal extent of line.
+    yPos: scalar indicating vertical position of line.
+    yLength: scalar indicating length of vertical ticks
+    starMarker: the marker type to use (e.g., '*' or '+')
+    starString: if defined, use this string instead of a marker. In this case fontsize=starSize
+    """
+    nStars=1  # I haven't implemented plotting more than one star.
+    # plt.hold(True)  # FIXME: Use holdState
+    xGap = gapFactor*nStars
+    xVals = [xRange[0], xRange[0],
+             np.mean(xRange)-xGap*np.diff(xRange)[0], np.nan,
+             np.mean(xRange)+xGap*np.diff(xRange)[0],
+             xRange[1], xRange[1]]
+    yVals = [yPos-yLength, yPos, yPos, np.nan, yPos, yPos, yPos-yLength]
+    hlines, = plt.plot(xVals, yVals, color=color)
+    hlines.set_clip_on(False)
+    xPosStar = []  # FINISH THIS! IT DOES NOT WORK WITH nStars>1
+    starsXvals = np.mean(xRange)
+    if starString is None:
+        hs, = plt.plot(starsXvals, np.tile(yPos, nStars),
+                       starMarker, mfc=color, mec='None', clip_on=False)
+        hs.set_markersize(starSize)
+    else:
+        hs = plt.text(starsXvals, yPos, starString, fontsize=starSize,
+                      va='center', ha='center', color=color, clip_on=False)
+    # plt.hold(False)
+    return [hs, hlines]
+
 def make_plots(fig: plt.Figure, ax: plt.Axes, data: dict, params: dict):
     """
     Draw plot on the provided figure and axis objects.
@@ -115,5 +151,109 @@ def make_plots(fig: plt.Figure, ax: plt.Axes, data: dict, params: dict):
     ax = style_plot(ax, num_it, params)
     
     ax.set_title(params['title'], fontsize=params['fontSizePanel'])
+    
+def psychome_plot(fig: plt.Figure, ax: plt.Axes, psych: dict, params: dict):
+    """
+    Make plot for psychometric curves.
+    :param fig: Figure to draw to
+    :param ax: Axis to draw to
+    :param psych: dict of three dicts each with 'fractions' of left choices
+    :param params: dict with values for:
+        idx_plot: Trial for which to plot curves
+        title: Plot title
+        fontSizeLabels: Legend and label font size
+        fontSizeTicks: Ticks font size
+        fontSizePanel: Plot title font size
+    """
+    dataEachCond = {}
 
+    fontSizeLabels = params['fontSizeLabels']
+    fontSizeTicks = params['fontSizeTicks']
+    fontSizePanel = params['fontSizePanel']
+    
+    colorEachCond = {}
+    colorEachCond['A only'] = TangoPalette['SkyBlue2']
+    colorEachCond['A + P'] = TangoPalette['Chameleon3']
+    colorEachCond['P : A'] = TangoPalette['ScarletRed2']
+    plt.sca(ax)
+    
+    eachCond = list(psych.keys())
+    possibleFMslopes = list(psych['A only'].keys())
+    for key in eachCond:
+        idx_plot = params['idx_plot']
+        if key == 'A + P':
+            idx_plot *= 10
+        elif key == 'P : A':
+            idx_plot += 45000
+        dataEachCond[key] = np.empty((len(possibleFMslopes), len(psych['A only'][possibleFMslopes[0]])))
+        for slope_idx, slope in enumerate(possibleFMslopes):
+            dataEachCond[key][slope_idx] = psych[key][slope][:, idx_plot]
 
+    xPad = 0.2 * (possibleFMslopes[-1] - possibleFMslopes[0])
+    fitxval = np.linspace(possibleFMslopes[0]-xPad, possibleFMslopes[-1]+xPad, 40)
+    lineEachCond = []
+
+    for indcond, cond in enumerate(eachCond):
+        fractionLeftEachValue = dataEachCond[cond].mean(axis=1)
+        fractionLeftSE = dataEachCond[cond].std(axis=1)
+        ciLeftEachValue = np.vstack((fractionLeftEachValue+fractionLeftSE,
+                                     fractionLeftEachValue-fractionLeftSE))
+
+        # -- Fit sigmoidal curve --
+        par0 = [0, 0.5, 0, 0]
+        bounds = [[-np.inf, 0.08, 0, 0], [np.inf, np.inf, 0.5, 0.5]]
+        curveParams, pcov = scipy.optimize.curve_fit(extrastats.psychfun, possibleFMslopes,
+                                                     fractionLeftEachValue, sigma=fractionLeftSE, p0=par0, bounds=bounds)
+        fityval = extrastats.psychfun(fitxval, *curveParams)
+        hfit, = ax.plot(fitxval, 100*fityval, '-', linewidth=2, color=colorEachCond[cond])
+        lineEachCond.append(hfit)
+        (pline, pcaps, pbars, pdots) = studyutils.plot_psychometric(possibleFMslopes,
+                                                                    fractionLeftEachValue,
+                                                                    ciLeftEachValue)
+        plt.setp(pcaps, color=colorEachCond[cond])
+        plt.setp(pbars, color=colorEachCond[cond])
+        plt.setp(pdots, mfc=colorEachCond[cond], mec='none', ms=6)
+        pline.set_visible(False)
+    plt.xlim([-0.01, 1.01])
+    plt.ylabel('Model Output Left (%)', fontsize=fontSizeLabels)
+    plt.xlabel('Stimulus Parameter λ', fontsize=fontSizeLabels)
+    extraplots.set_ticks_fontsize(plt.gca(), fontSizeTicks)
+    extraplots.boxoff(plt.gca())
+    plt.legend(lineEachCond, eachCond, loc='lower right', fontsize=fontSizeLabels, frameon=False)
+    ax.set_title(params['title'], fontsize=params['fontSizePanel'])
+
+def corr_plot(fig: plt.Figure, ax: plt.Axes, data: dict, params: dict):
+    """
+    Make box plot for correlations.
+    :param fig: Figure to draw to
+    :param ax: Axis to draw to
+    :param data: dict of two numpy arrays with correlation values
+    :param params: dict with values for:
+        idx_plot: Trial for which to plot correlations
+        title: Plot title
+        fontSizeLabels: Legend and label font size
+        fontSizeTicks: Ticks font size
+        fontSizePanel: Plot title font size
+    """
+    plt.sca(ax)
+    idx_plot = params['idx_plot']
+    corr_pta = data['A + P'][:, ::10][:, idx_plot]
+    corr_ap = data['P : A'][:, -5000:][:, idx_plot]
+    df_corr = pd.DataFrame({'A + P': corr_ap, 'P : A': corr_pta})
+    palette_box = {
+        'A + P': TangoPalette['Chameleon2'],
+        'P : A': TangoPalette['ScarletRed1']
+    }
+    palette_swarm = {
+        'A + P': TangoPalette['Chameleon3'],
+        'P : A': TangoPalette['ScarletRed3']
+    }
+    sns.boxplot(data=df_corr, palette=palette_box, showfliers=False, width=0.4, ax=ax, linewidth=0.8)
+    plt.ylabel('$\cos(α)$', fontsize=params['fontSizeLabels'])
+    sns.swarmplot(data=df_corr, palette=palette_swarm, ax=ax, size=2)
+    sns.despine(ax=ax)
+    hs, hl = significance_stars([0, 1], 0.8, yLength=0.01, gapFactor=0.2, starSize=6)
+    plt.setp(hl, lw=0.75)
+    plt.yticks(np.arange(-0.4,1,0.2))
+    extraplots.set_ticks_fontsize(plt.gca(), params['fontSizeTicks'])
+    ax.set_title(params['title'], fontsize=params['fontSizePanel'])
