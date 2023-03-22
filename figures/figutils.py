@@ -237,8 +237,8 @@ def corr_plot(fig: plt.Figure, ax: plt.Axes, data: dict, params: dict):
     """
     plt.sca(ax)
     idx_plot = params['idx_plot']
-    corr_pta = data['A + P'][:, ::10][:, idx_plot]
-    corr_ap = data['P : A'][:, -5000:][:, idx_plot]
+    corr_ap = data['A + P'][:, ::10][:, idx_plot]
+    corr_pta = data['P : A'][:, -5000:][:, idx_plot]
     df_corr = pd.DataFrame({'A + P': corr_ap, 'P : A': corr_pta})
     palette_box = {
         'A + P': TangoPalette['Chameleon2'],
